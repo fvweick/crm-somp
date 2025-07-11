@@ -4,15 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <meta name="theme-color" content="#4F46E5"/>
+    <meta name="theme-color" content="#4338CA"/>
     <meta name="description" content="CRM Base para o projeto S.O.M.P. com persistência na nuvem."/>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192x192.png">
 
-    <title>S.O.M.P. - CRM Firestore v1.1</title>
+    <title>S.O.M.P. - CRM Multi-Chat v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Estilos para a animação de digitação e barra de rolagem */
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .animate-pulse-dot { animation: pulse 1.4s infinite ease-in-out; }
         ::-webkit-scrollbar { width: 8px; }
@@ -31,12 +30,12 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const { useState, useEffect, useRef } = React;
 
-        // --- SUBSTITUA PELA SUA CONFIGURAÇÃO DO FIREBASE ---
+        // --- Configuração do Firebase ---
         const firebaseConfig = {
           apiKey: "AIzaSyAEskwA1gIJecsWGBrl_TI_-gHRK8yvGvI",
           authDomain: "so39-403.firebaseapp.com",
@@ -52,115 +51,163 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // --- Componentes React ---
-
+        // --- Ícones SVG ---
         const SendIcon = () => (
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
             <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         );
-        
-        function CrmApp() {
-          const [messages, setMessages] = useState([]);
-          const [inputValue, setInputValue] = useState('');
-          const [user, setUser] = useState(null);
-          const messagesEndRef = useRef(null);
+        const BackIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        );
 
-          useEffect(() => {
-            signInAnonymously(auth)
-              .then((userCredential) => {
-                setUser(userCredential.user);
-              })
-              .catch((error) => {
-                console.error("Erro na autenticação anônima:", error);
-              });
-          }, []);
-          
-          useEffect(() => {
-            if (!user) return;
+        // --- Componente de Chat Individual ---
+        function ChatScreen({ client, onBack }) {
+            const [messages, setMessages] = useState([]);
+            const [inputValue, setInputValue] = useState('');
+            const [user, setUser] = useState(auth.currentUser);
+            const messagesEndRef = useRef(null);
 
-            const messagesCollection = collection(db, "chats", "chat_principal", "messages");
-            const q = query(messagesCollection, orderBy("createdAt"));
-
-            const unsubscribe = onSnapshot(q, (querySnapshot) => {
-                const msgs = [];
-                querySnapshot.forEach((doc) => {
-                    msgs.push({ id: doc.id, ...doc.data() });
+            useEffect(() => {
+                if (!user || !client) return;
+                const messagesCollection = collection(db, "clients", client.id, "messages");
+                const q = query(messagesCollection, orderBy("createdAt"));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    const msgs = [];
+                    querySnapshot.forEach((doc) => {
+                        msgs.push({ id: doc.id, ...doc.data() });
+                    });
+                    setMessages(msgs);
                 });
-                setMessages(msgs);
-            });
+                return () => unsubscribe();
+            }, [user, client]);
 
-            return () => unsubscribe();
-          }, [user]);
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+            useEffect(scrollToBottom, [messages]);
 
-          const scrollToBottom = () => {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-          };
+            const handleSendMessage = async () => {
+                if (inputValue.trim() === '' || !user) return;
+                const messagesCollection = collection(db, "clients", client.id, "messages");
+                await addDoc(messagesCollection, {
+                    text: inputValue,
+                    createdAt: serverTimestamp(),
+                    uid: user.uid
+                });
+                setInputValue('');
+            };
 
-          useEffect(scrollToBottom, [messages]);
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                }
+            };
 
-          const handleSendMessage = async () => {
-            if (inputValue.trim() === '' || !user) return;
-            const messagesCollection = collection(db, "chats", "chat_principal", "messages");
-            await addDoc(messagesCollection, {
-              text: inputValue,
-              createdAt: serverTimestamp(),
-              uid: user.uid,
-              sender: 'user'
-            });
-            setInputValue('');
-          };
-          
-          const handleKeyPress = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSendMessage();
-            }
-          };
-
-          return (
-            <div className="flex flex-col h-screen bg-slate-100 font-sans">
-              <header className="bg-indigo-600 text-white p-4 shadow-md">
-                <h1 className="text-xl font-bold">S.O.M.P. | CRM Firestore</h1>
-              </header>
-              <main className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map(message => (
-                  <div key={message.id} className={`flex items-end gap-2 ${message.uid === user.uid ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl shadow ${
-                      message.uid === user.uid
-                        ? 'bg-indigo-500 text-white rounded-br-none'
-                        : 'bg-white text-gray-800 rounded-bl-none'
-                    }`}>
-                      <p className="whitespace-pre-wrap">{message.text}</p>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </main>
-              <footer className="bg-white p-2 border-t border-gray-200 sm:p-4">
-                <div className="flex items-center">
-                  <textarea
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Digite sua mensagem..."
-                    className="flex-1 w-full px-4 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                    rows="1"
-                    disabled={!user}
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    className="ml-3 bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-full shadow-md transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300"
-                    aria-label="Enviar mensagem"
-                    disabled={!user}
-                  >
-                    <SendIcon />
-                  </button>
+            return (
+                <div className="flex flex-col h-screen bg-slate-100 font-sans">
+                    <header className="bg-indigo-600 text-white p-4 shadow-md flex items-center gap-4">
+                        <button onClick={onBack} className="p-2 rounded-full hover:bg-indigo-700 transition-colors"><BackIcon /></button>
+                        <h1 className="text-xl font-bold">{client.name}</h1>
+                    </header>
+                    <main className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {messages.map(message => (
+                            <div key={message.id} className={`flex items-end gap-2 ${message.uid === user.uid ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl shadow ${message.uid === user.uid ? 'bg-indigo-500 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none'}`}>
+                                    <p className="whitespace-pre-wrap">{message.text}</p>
+                                </div>
+                            </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                    </main>
+                    <footer className="bg-white p-2 border-t border-gray-200 sm:p-4">
+                        <div className="flex items-center">
+                            <textarea value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyPress={handleKeyPress} placeholder="Digite sua mensagem..." className="flex-1 w-full px-4 py-2 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" rows="1"/>
+                            <button onClick={handleSendMessage} className="ml-3 bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-full shadow-md transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><SendIcon /></button>
+                        </div>
+                    </footer>
                 </div>
-              </footer>
-            </div>
-          );
+            );
+        }
+        
+        // --- Componente da Lista de Clientes ---
+        function ClientListScreen({ onClientSelect }) {
+            const [clients, setClients] = useState([]);
+            const [newClientName, setNewClientName] = useState('');
+
+            useEffect(() => {
+                const clientsCollection = collection(db, "clients");
+                const q = query(clientsCollection, orderBy("createdAt", "desc"));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    const clientList = [];
+                    querySnapshot.forEach((doc) => {
+                        clientList.push({ id: doc.id, ...doc.data() });
+                    });
+                    setClients(clientList);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            const handleAddClient = async () => {
+                if (newClientName.trim() === '') return;
+                const clientsCollection = collection(db, "clients");
+                await addDoc(clientsCollection, {
+                    name: newClientName,
+                    createdAt: serverTimestamp()
+                });
+                setNewClientName('');
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-100 font-sans">
+                    <header className="bg-indigo-600 text-white p-4 shadow-md"><h1 className="text-xl font-bold">Clientes | S.O.M.P.</h1></header>
+                    <div className="p-4 border-b">
+                        <div className="flex gap-2">
+                            <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Nome do novo cliente" className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                            <button onClick={handleAddClient} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold">Adicionar</button>
+                        </div>
+                    </div>
+                    <main className="flex-1 overflow-y-auto">
+                        <ul className="divide-y divide-slate-200">
+                            {clients.map(client => (
+                                <li key={client.id} onClick={() => onClientSelect(client)} className="p-4 hover:bg-slate-200 cursor-pointer transition-colors">
+                                    <p className="font-semibold text-slate-800">{client.name}</p>
+                                    <p className="text-sm text-slate-500">Criado em: {client.createdAt?.toDate().toLocaleDateString()}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    </main>
+                </div>
+            );
+        }
+
+        // --- Componente Principal ---
+        function CrmApp() {
+            const [user, setUser] = useState(null);
+            const [selectedClient, setSelectedClient] = useState(null);
+
+            useEffect(() => {
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    if (currentUser) {
+                        setUser(currentUser);
+                    } else {
+                        signInAnonymously(auth).catch(error => console.error("Falha na autenticação anônima:", error));
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+            
+            if (!user) {
+                return <div className="flex justify-center items-center h-screen"><p>Autenticando na Matriz...</p></div>;
+            }
+
+            if (selectedClient) {
+                return <ChatScreen client={selectedClient} onBack={() => setSelectedClient(null)} />;
+            }
+
+            return <ClientListScreen onClientSelect={setSelectedClient} />;
         }
 
         const container = document.getElementById('root');
@@ -170,14 +217,14 @@
         // Registro do Service Worker para PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js').then(registration => {
-                    console.log('ServiceWorker registrado com sucesso: ', registration.scope);
+                // CORREÇÃO: O caminho deve ser relativo para funcionar no GitHub Pages
+                navigator.serviceWorker.register('./service-worker.js').then(registration => {
+                    console.log('S.O.M.P. ServiceWorker registrado com sucesso: ', registration.scope);
                 }).catch(error => {
-                    console.log('Falha no registro do ServiceWorker: ', error);
+                    console.log('S.O.M.P. Falha no registro do ServiceWorker: ', error);
                 });
             });
         }
     </script>
 </body>
 </html>
-
