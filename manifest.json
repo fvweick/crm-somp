@@ -1,0 +1,23 @@
+{
+  "short_name": "CRM S.O.M.P.",
+  "name": "CRM Base do Sistema Operacional Mnemônico Puro",
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4F46E5",
+  "background_color": "#f1f5f9"
+}
+
